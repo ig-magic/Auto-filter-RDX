@@ -399,6 +399,22 @@ async def cancel_running_jobs(deps):
     return await _call(deps.store.cancel_running, deps.clock())
 
 
+async def discard_job(job_id, deps):
+    """Discard one unfinished job without starting it.
+
+    ``set_job_status`` only updates a job whose current status is ``running``.
+    Therefore a completed, failed, or already-discarded job returns ``False``.
+    If a driver is active, its next checkpoint sees the new status and stops.
+    """
+    now = deps.clock()
+    return await _call(
+        deps.store.set_job_status,
+        job_id,
+        "cancelled",
+        {"cancelled_at": now, "updated_at": now},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Status text
 # ---------------------------------------------------------------------------
@@ -582,3 +598,49 @@ def make_telegram_deps(bot, notify=None):
         save=save,
         notify=notify or make_default_notify(bot),
     )
+
+
+async def announce_interrupted_jobs(bot, admins):
+    """Send Resume/Discard controls for jobs interrupted by a restart.
+
+    Jobs deliberately remain in the ``running`` state until an admin chooses an
+    action. This function never resumes indexing automatically, and a database
+    or notification failure must not prevent the bot itself from starting.
+    """
+    admin_ids = list(admins or [])
+    if not admin_ids:
+        return
+
+    try:
+        jobs = await _call(get_store().list_running)
+    except Exception:
+        logger.exception("Could not load interrupted index jobs")
+        return
+
+    if not jobs:
+        return
+
+    from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    for job in jobs:
+        job_id = str(job["_id"])
+        text = (
+            "⚠️ <b>Indexing was interrupted by a bot restart.</b>\n\n"
+            f"{format_job_summary(job)}\n\n"
+            "Resume from the saved cursor, or discard this job. "
+            "It has not been resumed automatically."
+        )
+        markup = InlineKeyboardMarkup([[
+            InlineKeyboardButton("▶ Resume", callback_data=f"index_resume#{job_id}"),
+            InlineKeyboardButton("🗑 Discard", callback_data=f"index_discard#{job_id}"),
+        ]])
+        for admin_id in admin_ids:
+            try:
+                await bot.send_message(admin_id, text, reply_markup=markup)
+            except Exception as exc:
+                logger.warning(
+                    "Could not notify admin %s about interrupted index job %s: %s",
+                    admin_id,
+                    job_id,
+                    exc,
+                )
