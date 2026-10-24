@@ -73,7 +73,7 @@ COLLECTION_NAME = environ.get('COLLECTION_NAME', 'rdxcollection')
 PREMIUM_AND_REFERAL_MODE = bool(environ.get('PREMIUM_AND_REFERAL_MODE', True))  # Set True Or False
 
 # If PREMIUM_AND_REFERAL_MODE is True Then Fill Below Variable, If False Then No Need To Fill.
-REFERAL_COUNT = int(environ.get('REFERAL_COUNT', '20'))  # number of referal count
+REFERAL_COUNT = int(environ.get('REFERAL_COUNT', '05'))  # number of referal count
 REFERAL_PREMEIUM_TIME = environ.get('REFERAL_PREMEIUM_TIME', '1month')  # time in week, day, month.
 # Telegram Stars (XTR) subscription prices. Change the numbers or set the env vars.
 # Silver = 1 day, Gold = 15 days, Platinum = 30 days (monthly), Diamond = lifetime.
@@ -98,10 +98,10 @@ PUBLIC_FILE_CHANNEL = environ.get('PUBLIC_FILE_CHANNEL', '')  # Public Channel U
 
 
 # Links
-GRP_LNK = environ.get('GRP_LNK', 'https://t.me/movie_search_group1')
-CHNL_LNK = environ.get('CHNL_LNK', 'https://t.me/rdxmovie_hd')
-SUPPORT_CHAT = environ.get('SUPPORT_CHAT', 'movie_search_group1')  # Support Chat Link Without https:// or @
-OWNER_LNK = environ.get('OWNER_LNK', 'https://t.me/Ordinary_helper')
+GRP_LNK = environ.get('GRP_LNK', 'https://t.me/+iFNTH4aWzj1iZGZl')
+CHNL_LNK = environ.get('CHNL_LNK', 'https://t.me/+iFNTH4aWzj1iZGZl')
+SUPPORT_CHAT = environ.get('SUPPORT_CHAT', 'Vkytv')  # Support Chat Link Without https:// or @
+OWNER_LNK = environ.get('OWNER_LNK', 'https://t.me/Vkytv')
 
 # True Or False
 AI_SPELL_CHECK = bool(environ.get('AI_SPELL_CHECK', True))
