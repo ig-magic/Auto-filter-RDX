@@ -3,7 +3,7 @@
 Telegram added colored inline buttons in API layer 223. Pyrofork 2.3.45
 predates the high-level ``style`` argument, so this module supplies the three
 styled MTProto constructors used by this project and patches the shared button
-and markup writers once at startup. File buttons alternate by keyboard position.
+and markup writers once at startup. Search-result file buttons stay transparent.
 """
 
 from io import BytesIO
@@ -18,9 +18,8 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 _STYLE_FLAG = 1 << 10
 _ORIGINAL_WRITE = InlineKeyboardButton.write
 _ORIGINAL_MARKUP_WRITE = InlineKeyboardMarkup.write
-# File buttons alternate blue/green. Use ("default",) for Telegram's
-# transparent/uncoloured style, or ("primary",) to keep every file blue.
-_FILE_BUTTON_STYLES = ("primary", "success")
+# SearchMovie file results use Telegram's transparent/default style.
+_FILE_BUTTON_STYLES = ("default",)
 _SMALL_CAP_TRANSLATION = str.maketrans({
     "ᴀ": "a", "ʙ": "b", "ᴄ": "c", "ᴅ": "d", "ᴇ": "e",
     "ꜰ": "f", "ɢ": "g", "ʜ": "h", "ɪ": "i", "ᴊ": "j",
@@ -240,7 +239,7 @@ def _is_file_result_button(button):
 
 
 async def _write_styled_markup(markup, client):
-    """Alternate file-button colours with full keyboard/row context."""
+    """Apply transparent/default styling to file-result buttons."""
     if _FILE_BUTTON_STYLES:
         file_index = 0
         for row in markup.inline_keyboard:
@@ -252,7 +251,7 @@ async def _write_styled_markup(markup, client):
 
 
 def enable_primary_buttons():
-    """Enable label styles, alternate file colours, and transparent defaults."""
+    """Enable existing label styles and transparent file-result buttons."""
 
     if getattr(InlineKeyboardButton, "_rdx_primary_buttons", False):
         return
