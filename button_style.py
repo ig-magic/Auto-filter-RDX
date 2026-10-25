@@ -1,9 +1,9 @@
-"""Repository-wide Telegram primary button styling for Pyrofork.
+"""Repository-wide Telegram inline-button styling for Pyrofork.
 
-Telegram added colored inline buttons in API layer 223.  Pyrofork 2.3.45
+Telegram added colored inline buttons in API layer 223. Pyrofork 2.3.45
 predates the high-level ``style`` argument, so this module supplies the three
-styled MTProto constructors used by this project and patches the shared
-``InlineKeyboardButton.write`` method once at startup.
+styled MTProto constructors used by this project and patches the shared button
+and markup writers once at startup. File buttons alternate by keyboard position.
 """
 
 from io import BytesIO
@@ -12,11 +12,15 @@ import unicodedata
 from pyrogram import raw
 from pyrogram.raw.all import objects
 from pyrogram.raw.core import Bytes, Int, String, TLObject, Vector
-from pyrogram.types import InlineKeyboardButton
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 _STYLE_FLAG = 1 << 10
 _ORIGINAL_WRITE = InlineKeyboardButton.write
+_ORIGINAL_MARKUP_WRITE = InlineKeyboardMarkup.write
+# File buttons alternate blue/green. Use ("default",) for Telegram's
+# transparent/uncoloured style, or ("primary",) to keep every file blue.
+_FILE_BUTTON_STYLES = ("primary", "success")
 _SMALL_CAP_TRANSLATION = str.maketrans({
     "ᴀ": "a", "ʙ": "b", "ᴄ": "c", "ᴅ": "d", "ᴇ": "e",
     "ꜰ": "f", "ɢ": "g", "ʜ": "h", "ɪ": "i", "ᴊ": "j",
@@ -92,8 +96,13 @@ def _style_for_text(text):
     return "primary"
 
 
-def _button_style(text):
-    kind = _style_for_text(text)
+def _button_style(text, kind=None):
+    """Build a Telegram style; ``default`` means transparent/uncoloured."""
+    kind = _style_for_text(text) if kind is None else kind
+    if kind in {"default", "transparent", "none"}:
+        return None
+    if kind not in {"primary", "danger", "success"}:
+        kind = "primary"
     return _PrimaryButtonStyle(
         bg_primary=(kind == "primary"),
         bg_danger=(kind == "danger"),
@@ -120,10 +129,12 @@ class _PrimaryCallbackButton(raw.types.KeyboardButtonCallback):
     def write(self, *args):
         data = BytesIO()
         data.write(Int(self.ID, False))
-        flags = _STYLE_FLAG
+        style = _button_style(self.text, getattr(self, "_rdx_style", None))
+        flags = _STYLE_FLAG if style is not None else 0
         flags |= 1 << 0 if self.requires_password else 0
         data.write(Int(flags))
-        data.write(_button_style(self.text).write())
+        if style is not None:
+            data.write(style.write())
         data.write(String(self.text))
         data.write(Bytes(self.data))
         return data.getvalue()
@@ -145,8 +156,10 @@ class _PrimaryUrlButton(raw.types.KeyboardButtonUrl):
     def write(self, *args):
         data = BytesIO()
         data.write(Int(self.ID, False))
-        data.write(Int(_STYLE_FLAG))
-        data.write(_button_style(self.text).write())
+        style = _button_style(self.text, getattr(self, "_rdx_style", None))
+        data.write(Int(_STYLE_FLAG if style is not None else 0))
+        if style is not None:
+            data.write(style.write())
         data.write(String(self.text))
         data.write(String(self.url))
         return data.getvalue()
@@ -173,11 +186,13 @@ class _PrimarySwitchInlineButton(raw.types.KeyboardButtonSwitchInline):
     def write(self, *args):
         data = BytesIO()
         data.write(Int(self.ID, False))
-        flags = _STYLE_FLAG
+        style = _button_style(self.text, getattr(self, "_rdx_style", None))
+        flags = _STYLE_FLAG if style is not None else 0
         flags |= 1 << 0 if self.same_peer else 0
         flags |= 1 << 1 if self.peer_types else 0
         data.write(Int(flags))
-        data.write(_button_style(self.text).write())
+        if style is not None:
+            data.write(style.write())
         data.write(String(self.text))
         data.write(String(self.query))
         if self.peer_types:
@@ -185,31 +200,59 @@ class _PrimarySwitchInlineButton(raw.types.KeyboardButtonSwitchInline):
         return data.getvalue()
 
 
+def _inherit_style(raw_button, button):
+    """Carry an explicit high-level button style into its raw TL object."""
+    raw_button._rdx_style = getattr(button, "_rdx_style", None)
+    return raw_button
+
+
 async def _write_primary_button(button, client):
     raw_button = await _ORIGINAL_WRITE(button, client)
     if isinstance(raw_button, raw.types.KeyboardButtonCallback):
-        return _PrimaryCallbackButton(
+        return _inherit_style(_PrimaryCallbackButton(
             text=raw_button.text,
             data=raw_button.data,
             requires_password=raw_button.requires_password,
-        )
+        ), button)
     if isinstance(raw_button, raw.types.KeyboardButtonUrl):
-        return _PrimaryUrlButton(
+        return _inherit_style(_PrimaryUrlButton(
             text=raw_button.text,
             url=raw_button.url,
-        )
+        ), button)
     if isinstance(raw_button, raw.types.KeyboardButtonSwitchInline):
-        return _PrimarySwitchInlineButton(
+        return _inherit_style(_PrimarySwitchInlineButton(
             text=raw_button.text,
             query=raw_button.query,
             same_peer=raw_button.same_peer,
             peer_types=raw_button.peer_types,
-        )
+        ), button)
     return raw_button
 
 
+def _is_file_result_button(button):
+    data = getattr(button, "callback_data", None)
+    if isinstance(data, bytes):
+        try:
+            data = data.decode("utf-8")
+        except UnicodeDecodeError:
+            return False
+    return isinstance(data, str) and data.startswith(("file#", "filep#"))
+
+
+async def _write_styled_markup(markup, client):
+    """Alternate file-button colours with full keyboard/row context."""
+    if _FILE_BUTTON_STYLES:
+        file_index = 0
+        for row in markup.inline_keyboard:
+            for button in row:
+                if _is_file_result_button(button):
+                    button._rdx_style = _FILE_BUTTON_STYLES[file_index % len(_FILE_BUTTON_STYLES)]
+                    file_index += 1
+    return await _ORIGINAL_MARKUP_WRITE(markup, client)
+
+
 def enable_primary_buttons():
-    """Enable per-label danger (red), success (green), and primary (blue) styles."""
+    """Enable label styles, alternate file colours, and transparent defaults."""
 
     if getattr(InlineKeyboardButton, "_rdx_primary_buttons", False):
         return
@@ -219,5 +262,6 @@ def enable_primary_buttons():
     objects[_PrimaryUrlButton.ID] = _PrimaryUrlButton
     objects[_PrimarySwitchInlineButton.ID] = _PrimarySwitchInlineButton
     InlineKeyboardButton.write = _write_primary_button
+    InlineKeyboardMarkup.write = _write_styled_markup
     InlineKeyboardButton._rdx_primary_buttons = True
 
