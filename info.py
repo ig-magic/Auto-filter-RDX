@@ -106,6 +106,7 @@ OWNER_LNK = environ.get('OWNER_LNK', 'https://t.me/Vkytv')
 # True Or False
 AI_SPELL_CHECK = bool(environ.get('AI_SPELL_CHECK', True))
 PM_SEARCH = bool(environ.get('PM_SEARCH', True))
+SIMPLE_USER_UI = environ.get('SIMPLE_USER_UI', 'True').strip().lower() in {'1', 'true', 'yes', 'on'}
 BUTTON_MODE = environ.get('BUTTON_MODE', 'True').strip().lower() in {'1', 'true', 'yes', 'on'}
 MAX_BTN = environ.get('MAX_BTN', 'True').strip().lower() in {'1', 'true', 'yes', 'on'}
 IS_TUTORIAL = bool(environ.get('IS_TUTORIAL', False))
